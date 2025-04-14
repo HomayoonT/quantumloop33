@@ -1,0 +1,26 @@
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y \
+    xvfb \
+    x11vnc \
+    wget \
+    curl \
+    jq \
+    default-jre \
+    unzip \
+    python3-pip \
+    xfce4 \
+    xfce4-goodies \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Google Chrome
+RUN wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb && \
+    apt-get update && apt-get install -y ./google-chrome-stable_current_amd64.deb || apt-get -f install -y && \
+    rm google-chrome-stable_current_amd64.deb
+
+# Install ngrok
+RUN curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null && \
+    echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | tee /etc/apt/sources.list.d/ngrok.list && \
+    apt-get update && apt-get install -y ngrok && \
+    rm -rf /var/lib/apt/lists/*
