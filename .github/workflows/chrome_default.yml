@@ -1,0 +1,159 @@
+name: Linux VNC with Chrome Persistence
+
+on:
+  workflow_dispatch:
+
+jobs:
+  linux_vnc:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y xvfb x11vnc wget curl jq default-jre unzip python3-pip xfce4 xfce4-goodies
+
+      - name: Install Google Chrome
+        run: |
+          wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo apt install -y ./google-chrome-stable_current_amd64.deb || sudo apt -f install -y
+
+      - name: Verify Google Chrome installation
+        run: google-chrome --version
+
+      - name: Set up Xvfb, Xfce, VNC
+        run: |
+          Xvfb :1 -screen 0 1024x768x16 &
+          export DISPLAY=:1
+          echo "export DISPLAY=:1" >> $GITHUB_ENV
+          sleep 2
+          startxfce4 &
+          sleep 5
+          x11vnc -storepasswd ${{ secrets.VNC_PASSWORD }} /tmp/passwd
+          x11vnc -forever -rfbauth /tmp/passwd -display :1 -shared -bg
+          sleep 1
+
+      - name: Install latest ngrok (v3)
+        run: |
+          curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
+          echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
+          sudo apt update && sudo apt install -y ngrok
+
+      - name: Authenticate and start ngrok
+        run: |
+          ngrok config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
+          ngrok tcp 5900 --log=stdout > ngrok.log &
+          sleep 3
+
+      - name: Get ngrok public URL
+        run: |
+          echo "⏳ Waiting for ngrok tunnel..."
+          for i in {1..15}; do
+            NGROK_URL=$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url // empty')
+            if [[ -n "$NGROK_URL" ]]; then
+              echo "🔗 VNC Public URL: $NGROK_URL"
+              break
+            else
+              echo "⌛ Still waiting..."
+              sleep 2
+            fi
+          done
+
+          if [[ -z "$NGROK_URL" ]]; then
+            echo "❌ ngrok tunnel failed. ngrok logs:"
+            cat ngrok.log
+          fi
+
+      - name: Confirm DISPLAY env
+        run: echo $DISPLAY
+
+      - name: Keep job alive for 5 mins
+        run: |
+          echo "🕒 Session ready. Connect your VNC client to the ngrok URL above."
+          echo "Job will stay alive for 5.5 hours (19800 seconds)..."
+          sleep 300
+
+      - name: Upload Google Chrome profile
+        uses: actions/upload-artifact@v4
+        with:
+          name: chrome-profile
+          path: ~/.config/google-chrome/
+
+  restore_linux_vnc:
+    needs: linux_vnc
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y xvfb x11vnc wget curl jq default-jre unzip python3-pip xfce4 xfce4-goodies
+
+      - name: Install Google Chrome
+        run: |
+          wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo apt install -y ./google-chrome-stable_current_amd64.deb || sudo apt -f install -y
+
+      - name: Download Google Chrome profile
+        uses: actions/download-artifact@v4
+        with:
+          name: chrome-profile
+          path: ~/.config/google-chrome/
+
+      - name: Set up Xvfb, Xfce, VNC
+        run: |
+          Xvfb :1 -screen 0 1024x768x16 &
+          export DISPLAY=:1
+          echo "export DISPLAY=:1" >> $GITHUB_ENV
+          sleep 2
+          startxfce4 &
+          sleep 5
+          x11vnc -storepasswd ${{ secrets.VNC_PASSWORD }} /tmp/passwd
+          x11vnc -forever -rfbauth /tmp/passwd -display :1 -shared -bg
+          sleep 1
+
+      - name: Install latest ngrok (v3)
+        run: |
+          curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
+          echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
+          sudo apt update && sudo apt install -y ngrok
+
+      - name: Authenticate and start ngrok
+        run: |
+          ngrok config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
+          ngrok tcp 5900 --log=stdout > ngrok.log &
+          sleep 3
+
+      - name: Get ngrok public URL
+        run: |
+          echo "⏳ Waiting for ngrok tunnel..."
+          for i in {1..15}; do
+            NGROK_URL=$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url // empty')
+            if [[ -n "$NGROK_URL" ]]; then
+              echo "🔗 VNC Public URL: $NGROK_URL"
+              break
+            else
+              echo "⌛ Still waiting..."
+              sleep 2
+            fi
+          done
+
+          if [[ -z "$NGROK_URL" ]]; then
+            echo "❌ ngrok tunnel failed. ngrok logs:"
+            cat ngrok.log
+          fi
+
+      - name: Confirm DISPLAY env
+        run: echo $DISPLAY
+
+      - name: Keep job alive for 5.5 hours
+        run: |
+          echo "🕒 Session ready. Connect your VNC client to the ngrok URL above."
+          echo "Job will stay alive for 5.5 hours (19800 seconds)..."
+          sleep 19800
