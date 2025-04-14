@@ -16,6 +16,7 @@ jobs:
         with:
           image: ghcr.io/${{ env.REPO_OWNER_LC }}/linux-vnc-chrome:latest
           options: -e VNC_PASSWORD=${{ secrets.VNC_PASSWORD }} -e NGROK_AUTH_TOKEN=${{ secrets.NGROK_AUTH_TOKEN }}
+          shell: bash
           run: |
             Xvfb :1 -screen 0 1024x768x16 &
             export DISPLAY=:1
